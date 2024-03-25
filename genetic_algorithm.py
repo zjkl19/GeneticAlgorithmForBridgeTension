@@ -15,8 +15,8 @@ def evalAdjustment(individual, initial_forces, target_forces, influence_matrix, 
     penalties = 0
     if any(adjusted_forces > max_force) or any(adjusted_forces < 0):
         penalties += 1e6
-    if abs(individual[0]) > 20 or abs(individual[1]) > 10:
-        penalties += 1e6
+    #if abs(individual[0]) > 20 or abs(individual[1]) > 10:
+    #    penalties += 1e6
     error = np.abs((adjusted_forces - target_forces) / target_forces)
     if any(x < min_adjustment or x > max_adjustment for x in individual):
         penalties += 1e6
