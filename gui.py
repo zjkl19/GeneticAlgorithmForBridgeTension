@@ -7,6 +7,12 @@ import shutil
 import time
 from tkinter import ttk  # 导入ttk模块，用于创建Notebook
 
+import logging
+
+# 配置日志记录器
+logging.basicConfig(filename='calculation_log.txt', level=logging.INFO,
+                    format='%(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+
 class App:
     def __init__(self, root):
         self.root = root
@@ -75,7 +81,10 @@ class App:
         self.influence_matrix_text.grid(row=row_index, column=1, columnspan=2, pady=5)
         row_index += 1
 
-
+        # 添加查看日志按钮
+        self.view_log_button = tk.Button(self.root, text="查看日志", command=self.view_log)
+        self.view_log_button.grid(row=row_index, column=0, columnspan=3, pady=5)
+        row_index += 1
 
         # 添加标签页控件
         self.notebook = ttk.Notebook(self.root)
@@ -114,7 +123,7 @@ class App:
         self.backup_config_button = tk.Button(self.root, text="备份配置", command=self.backup_config)
         self.backup_config_button.grid(row=row_index, column=2)
         row_index += 2  # 添加一个额外的空行作为分隔
-        
+
         # 结果显示区域，位于所有控件的最下方
         self.result_text = tk.Text(self.root, height=10, width=50)
         self.result_text.grid(row=row_index, column=0, columnspan=3, pady=5)
@@ -122,6 +131,9 @@ class App:
         # 添加开始计算按钮
         self.start_button = tk.Button(self.root, text="开始计算", command=self.start_calculation)
         self.start_button.grid(row=row_index+1, column=0, columnspan=3, pady=5)
+
+
+
 
         # 调整Notebook的布局以充满整个窗口宽度
         self.root.grid_columnconfigure(1, weight=1)
@@ -140,8 +152,21 @@ class App:
         self.mutation_rate_min.insert(0, '0.01')
         self.mutation_rate_max.insert(0, '0.1')
 
-
-
+    def view_log(self):
+        import os
+        import subprocess
+        import sys
+        
+        log_file_path = 'calculation_log.txt'
+        try:
+            if sys.platform.startswith('win'):
+                os.startfile(log_file_path)
+            elif sys.platform.startswith('darwin'):
+                subprocess.call(('open', log_file_path))
+            else:
+                subprocess.call(('xdg-open', log_file_path))
+        except Exception as e:
+            messagebox.showerror("错误", f"无法打开日志文件: {e}")
 
     def save_config(self):
         config = {
@@ -318,12 +343,27 @@ class App:
 
             # 清除旧结果并显示新结果
             self.result_text.delete('1.0', tk.END)
-            self.result_text.insert(tk.END, f"最优解的适应度: {best_fitness}\n")
+            self.result_text.insert(tk.END, f"最优解的适应度: {best_fitness[0]:.8f}\n")
             self.result_text.insert(tk.END, f"最优解: {best_individual_formatted}\n")
             self.result_text.insert(tk.END, "各索力的误差百分比: \n" + ", ".join(map(str, error_percentages_formatted)) + "\n")
             self.result_text.insert(tk.END, f"绝对值误差最大的是索 {max_error_idx + 1}，误差: {max_error_value:.2f}, 误差百分比: {max_error_percentage}%\n")
             self.result_text.insert(tk.END, f"运行时间: {int(hours)}时{int(minutes)}分{int(seconds)}秒\n")    # 显示运行时间
 
+            time_str = f"{int(hours)}小时{int(minutes)}分{int(seconds)}秒"
+
+            # 构建日志消息
+            log_message = (f"计算时间: {time_str}\n"
+                        f"最优解的适应度: {best_fitness[0]:.8f}\n"
+                        f"最优解: {best_individual_formatted}\n"
+                        f"各索力的误差百分比: {', '.join(map(str, error_percentages_formatted))}\n"
+                        f"绝对值误差最大的是索 {max_error_idx + 1}，误差: {max_error_value:.2f}, 误差百分比: {max_error_percentage}%\n"
+                        f"输入参数: 种群大小={population_size}, 交叉率={crossover_rate}, 变异率={mutation_rate}, "
+                        f"最小调整力={min_adjustment}, 最大调整力={max_adjustment}, 索力最大值限制={max_force}, "
+                        f"误差控制范围={tolerance*100}%, 代数={ngen}\n"
+                        "--------------------------------------------------")
+
+            # 记录日志
+            logging.info(log_message)
 
         except Exception as e:
             messagebox.showerror("运算错误", f"遗传算法运行失败：{e}")
