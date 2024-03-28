@@ -19,26 +19,45 @@ if not hasattr(creator, "Individual"):
     creator.create("Individual", list, fitness=creator.FitnessMin)
 
 # 评估个体适应度的函数
-def evalAdjustment(individual, initial_forces, target_forces, influence_matrix, max_force, min_adjustment, max_adjustment, tolerance):
+def evalAdjustment(individual, initial_forces, target_forces, influence_matrix, max_force, min_adjustment, max_adjustment, tolerance,lower_bounds, upper_bounds, selected_metric='max_error_percent'):
+    PENALTY = 1e3
     # 根据影响矩阵和个体基因计算调整后的索力
     adjusted_forces = initial_forces + np.dot(influence_matrix, individual)
     penalties = 0  # 初始化罚分
     # 如果调整后的索力超出最大值或小于0，则增加罚分
     if any(adjusted_forces > max_force) or any(adjusted_forces < 0):
-        penalties += 1e6
+        penalties += PENALTY
+    # 检查个体的每个基因是否在下限和上限之间
+    for gene, lb, ub in zip(individual, lower_bounds, upper_bounds):
+        if gene < lb or gene > ub:
+            penalties += PENALTY  # 对于超出范围的基因施加罚分
     # 计算索力调整的误差
     error = np.abs((adjusted_forces - target_forces) / target_forces)
     # 如果个体基因值超出调整范围，则增加罚分
     if any(x < min_adjustment or x > max_adjustment for x in individual):
-        penalties += 1e6
+        penalties += PENALTY
     # 如果误差超出容忍范围，则增加罚分
     if any(error > tolerance):
-        penalties += 1e6
+        penalties += PENALTY
+
+    error_percent = (adjusted_forces - target_forces) / target_forces  # 计算误差
+    
+    # 计算最大误差百分比，同时考虑正误差和负误差
+    max_positive_error_percent = np.max(error_percent)
+    max_negative_error_percent = np.min(error_percent)
+    max_error_percent = max_positive_error_percent if abs(max_positive_error_percent) >= abs(max_negative_error_percent) else max_negative_error_percent
+    max_abs_error_percent = np.max(np.abs(error_percent))  # 计算最大绝对误差百分比
+
     mse = np.mean(np.square(error))  # 计算误差的均方误差
-    return (mse + penalties,)
+
+    # 根据选择的指标返回适应度
+    if selected_metric == 'mse':
+        return (mse + penalties,)
+    elif selected_metric == 'max_error_percent':
+        return (max_abs_error_percent + penalties,)
 
 # 运行遗传算法的主函数
-def run_genetic_algorithm(initial_forces, target_forces, influence_matrix, population_size, crossover_rate, mutation_rate, min_adjustment, max_adjustment, max_force, tolerance, ngen):
+def run_genetic_algorithm(initial_forces, target_forces, influence_matrix, population_size, crossover_rate, mutation_rate, min_adjustment, max_adjustment, max_force, tolerance, ngen,lower_bounds, upper_bounds,selected_metric):
     toolbox = base.Toolbox()
     # 注册属性生成函数，生成调整力的浮点数
     toolbox.register("attr_float", np.random.uniform, min_adjustment, max_adjustment)
@@ -50,7 +69,7 @@ def run_genetic_algorithm(initial_forces, target_forces, influence_matrix, popul
     # 注册评估函数，包括了额外参数的传递
     toolbox.register("evaluate", evalAdjustment, initial_forces=initial_forces, target_forces=target_forces, 
                      influence_matrix=influence_matrix, max_force=max_force, min_adjustment=min_adjustment, 
-                     max_adjustment=max_adjustment, tolerance=tolerance)
+                     max_adjustment=max_adjustment, tolerance=tolerance,lower_bounds=lower_bounds,upper_bounds=upper_bounds,selected_metric=selected_metric)
 
     # 注册交叉、变异和选择算子
     toolbox.register("mate", tools.cxTwoPoint)
