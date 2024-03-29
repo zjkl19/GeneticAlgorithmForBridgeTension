@@ -7,7 +7,7 @@ import shutil
 import time
 from tkinter import ttk  # 导入ttk模块，用于创建Notebook
 from openpyxl import Workbook
-
+from datetime import datetime
 import logging
 
 # 配置日志记录器
@@ -17,10 +17,32 @@ logging.basicConfig(filename='calculation_log.txt', level=logging.INFO,
 import openpyxl
 from openpyxl import Workbook
 
-def generate_excel(initial_forces, target_forces, influence_matrix, best_individual, adjusted_individual):
+def generate_excel_with_timestamp(initial_forces, target_forces, influence_matrix, best_individual, adjusted_individual):
+    # 获取当前时间戳
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"计算结果_{timestamp}.xlsx"
+
     wb = Workbook()
     ws = wb.active
     ws.title = "计算结果"
+
+    # 设置表头
+    ws["A1"] = "初始索力"
+    ws["B1"] = "目标索力"
+    # 影响矩阵的表头将根据矩阵的列数动态设置
+    n = len(initial_forces)  # 索力数量
+    matrix_start_col = 3  # 影响矩阵开始的列编号
+    for j in range(matrix_start_col, matrix_start_col + n):
+        ws.cell(row=1, column=j).value = f"影响因子{j-2}"
+
+    matrix_end_col = matrix_start_col + n - 1
+    ws[openpyxl.utils.get_column_letter(matrix_end_col + 1) + "1"] = "原始最优解"
+    ws[openpyxl.utils.get_column_letter(matrix_end_col + 2) + "1"] = "调整阈值后的最优解"
+    ws[openpyxl.utils.get_column_letter(matrix_end_col + 3) + "1"] = "原始最终索力"
+    ws[openpyxl.utils.get_column_letter(matrix_end_col + 4) + "1"] = "原始误差%"
+    ws[openpyxl.utils.get_column_letter(matrix_end_col + 5) + "1"] = "调整后最终索力"
+    ws[openpyxl.utils.get_column_letter(matrix_end_col + 6) + "1"] = "调整后误差%"
+
 
     # 填充初始索力和目标索力
     for i, (init_force, target_force) in enumerate(zip(initial_forces, target_forces), start=2):
@@ -58,14 +80,15 @@ def generate_excel(initial_forces, target_forces, influence_matrix, best_individ
 
         # 将计算结果公式填充到单元格中
         ws.cell(row=i, column=matrix_end_col + 3, value=final_force_formula)
-        ws.cell(row=i, column=matrix_end_col + 4, value=f'=({openpyxl.utils.get_column_letter(matrix_end_col + 3)}{i}-$B{i})/$B{i}*100')
-
+        ws.cell(row=i, column=matrix_end_col + 4, value=f'=ROUND(({openpyxl.utils.get_column_letter(matrix_end_col + 3)}{i}-$B{i})/$B{i}*100, 2)')    
         ws.cell(row=i, column=matrix_end_col + 5, value=adjusted_final_force_formula)
-        ws.cell(row=i, column=matrix_end_col + 6, value=f'=({openpyxl.utils.get_column_letter(matrix_end_col + 5)}{i}-$B{i})/$B{i}*100')
+        ws.cell(row=i, column=matrix_end_col + 6, value=f'=ROUND(({openpyxl.utils.get_column_letter(matrix_end_col + 5)}{i}-$B{i})/$B{i}*100, 2)')
 
     # 保存Excel文件
-    wb.save("计算结果.xlsx")
-
+    wb.save(filename)
+    return filename  # 返回生成的文件名，以便后续操作（如提示用户文件已保存等）)
+import os
+import glob
 
 
 class App:
@@ -75,7 +98,18 @@ class App:
         self.selected_metric = tk.StringVar(value="最大误差比例")  # 默认为最大误差比例
         self.create_widgets()
 
-
+    def open_latest_excel(self):
+        # 查找当前目录下所有匹配的Excel文件
+        files = glob.glob("计算结果_*.xlsx")
+        # 按文件修改时间排序，获取最新的文件
+        if files:
+            latest_file = max(files, key=os.path.getmtime)
+            try:
+                os.startfile(latest_file)  # 尝试使用系统默认方式打开文件
+            except Exception as e:
+                messagebox.showerror("错误", f"无法打开文件{latest_file}。\n错误信息: {str(e)}")
+        else:
+            messagebox.showinfo("提示", "当前目录下没有找到Excel文件，请先生成。")
 
     def create_widgets(self):
         # 输入参数区域
@@ -167,6 +201,11 @@ class App:
         # 添加查看日志按钮
         self.view_log_button = tk.Button(self.root, text="查看日志", command=self.view_log)
         self.view_log_button.grid(row=row_index, column=0, columnspan=3, pady=5)
+        row_index += 1
+
+        # 创建“打开最新验算Excel”按钮
+        self.open_excel_button = tk.Button(self.root, text="打开最新验算Excel", command=self.open_latest_excel)
+        self.open_excel_button.grid(row=row_index, column=0, columnspan=3, pady=5)
         row_index += 1
 
         # 添加标签页控件
@@ -492,8 +531,8 @@ class App:
             time_str = f"{int(hours)}小时{int(minutes)}分{int(seconds)}秒"
 
             
-            # 调用 generate_excel 生成Excel文件
-            generate_excel(
+            # 调用 generate_excel_with_timestamp 生成Excel文件
+            generate_excel_with_timestamp(
                 initial_forces.tolist(), 
                 target_forces.tolist(), 
                 influence_matrix, 
