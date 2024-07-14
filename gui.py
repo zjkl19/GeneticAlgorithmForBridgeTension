@@ -430,7 +430,7 @@ class App:
 
     
     def start_calculation(self):
-        # 先获取并验证输入参数...
+        # 先获取并验证输入参数
         selected_metric = self.selected_metric.get()
         # 将中文标签转换回英文代码
         metric_code = "mse" if selected_metric == "均方误差" else "max_error_percent"
@@ -441,7 +441,7 @@ class App:
             return  # 输入验证失败
 
         # 参数解包
-        population_size, crossover_rate, mutation_rate, min_adjustment, max_adjustment, max_force, tolerance, ngen ,lower_bounds ,upper_bounds = params
+        population_size, crossover_rate, mutation_rate, min_adjustment, max_adjustment, max_force, tolerance, ngen, lower_bounds, upper_bounds = params
 
         threshold = float(self.adjustment_threshold.get())  # 获取用户输入的阈值
 
@@ -466,8 +466,7 @@ class App:
         except Exception as e:
             messagebox.showerror("未知错误", f"在处理输入数据时发生错误: {e}")
             return  # 终止计算过程
-  
-        
+
         # 运行遗传算法
         try:
             # 在运行遗传算法之前记录起始时间
@@ -477,8 +476,8 @@ class App:
             best_individual, best_fitness, final_pop, log = run_genetic_algorithm(
                 initial_forces, target_forces, influence_matrix, 
                 population_size, crossover_rate, mutation_rate, 
-                min_adjustment, max_adjustment, max_force, tolerance, ngen,lower_bounds, upper_bounds,selected_metric=metric_code
-            )         
+                min_adjustment, max_adjustment, max_force, tolerance, ngen, lower_bounds, upper_bounds, selected_metric=metric_code
+            )
             best_individual_formatted = [round(x, 0) for x in best_individual]
 
             # 计算调整后的索力和误差百分比
@@ -487,7 +486,6 @@ class App:
             # 计算实际误差和误差百分比
             actual_errors = adjusted_forces - target_forces
             original_error_percentages = 100 * actual_errors / target_forces
-            #original_error_percentages_formatted = [round(e, 2) for e in original_error_percentages]
             original_error_percentages_formatted = [f"{e:.2f}%" for e in original_error_percentages]
 
             # 找到绝对值误差最大的索
@@ -497,8 +495,8 @@ class App:
 
             # 根据阈值调整索力值
             adjusted_individual = [value if abs(value) > threshold else 0 for value in best_individual]
-
             adjusted_individual_formatted = [round(x, 0) for x in adjusted_individual]
+
             # 根据阈值调整索力值后，再次计算误差百分比
             adjusted_forces_after_threshold = initial_forces + np.dot(influence_matrix, adjusted_individual)
             adjusted_forces_after_threshold_formatted = [round(x, 2) for x in adjusted_forces_after_threshold]
@@ -506,10 +504,18 @@ class App:
             adjusted_error_percentages = 100 * (adjusted_forces_after_threshold - target_forces) / target_forces
             adjusted_error_percentages_formatted = [f"{e:.2f}%" for e in adjusted_error_percentages]
 
+            # 找到调整后的最大误差百分比
+            max_adjusted_error_idx = np.argmax(np.abs(adjusted_error_percentages))
+            max_adjusted_error_value = adjusted_error_percentages[max_adjusted_error_idx]  # 绝对值误差最大的实际误差值（包括正负号）
+            max_adjusted_error_percentage = round(max_adjusted_error_value, 2)  # 对应的误差百分比
 
-           # 记录算法完成后的时间
+            # 检查是否有解满足误差要求
+            solution_found = all(abs(e) <= tolerance * 100 for e in adjusted_error_percentages)
+            solution_status = f"状态: {'找到解，调整后的最大误差百分比为' if solution_found else f'未找到解，当前计算最接近的解调整后的最大误差百分比为'}: {max_adjusted_error_percentage}%"
+
+            # 记录算法完成后的时间
             end_time = time.time()
-            
+
             # 计算运行时间
             run_time = end_time - start_time
             # 转换为时分秒
@@ -518,6 +524,7 @@ class App:
 
             # 清除旧结果并显示新结果
             self.result_text.delete('1.0', tk.END)
+            self.result_text.insert(tk.END, f"{solution_status}\n")
             self.result_text.insert(tk.END, f"最优解的适应度: {best_fitness[0]:.8f}\n")
             self.result_text.insert(tk.END, f"原始最优解: {best_individual_formatted}\n")
             self.result_text.insert(tk.END, f"原始调整后索力: {adjusted_forces_formatted}\n")
@@ -526,13 +533,12 @@ class App:
             self.result_text.insert(tk.END, f"调整阈值后的最优解: {adjusted_individual_formatted}\n")
             self.result_text.insert(tk.END, f"调整阈值后索力: {adjusted_forces_after_threshold_formatted}\n")
             self.result_text.insert(tk.END, "调整后的误差百分比: \n" + ", ".join(adjusted_error_percentages_formatted) + "\n")
-            self.result_text.insert(tk.END, f"运行时间: {int(hours)}时{int(minutes)}分{int(seconds)}秒\n")    # 显示运行时间
+            self.result_text.insert(tk.END, f"运行时间: {int(hours)}时{int(minutes)}分{int(seconds)}秒\n")
 
             time_str = f"{int(hours)}小时{int(minutes)}分{int(seconds)}秒"
 
-            
             # 调用 generate_excel_with_timestamp 生成Excel文件
-            generate_excel_with_timestamp(
+            filename = generate_excel_with_timestamp(
                 initial_forces.tolist(), 
                 target_forces.tolist(), 
                 influence_matrix, 
@@ -540,11 +546,10 @@ class App:
                 adjusted_individual_formatted
             )
 
-
             # 构建日志消息
             log_message = (f"计算时间: {time_str}\n"
                         f"最优解的适应度: {best_fitness[0]:.8f}\n"
-                        f"原始最优解: {', '.join(map(str, best_individual_formatted))}\n"  # 确保转换为字符串
+                        f"原始最优解: {', '.join(map(str, best_individual_formatted))}\n"
                         f"原始各索力的误差百分比: {', '.join(map(lambda x: f'{x:.2f}%', original_error_percentages))}\n"
                         f"绝对值误差最大的是索 {max_error_idx + 1}，误差: {max_error_value:.2f}, 误差百分比: {max_error_percentage:.2f}%\n"
                         f"输入参数: 种群大小={population_size}, 交叉率={crossover_rate}, 变异率={mutation_rate}, "
@@ -552,17 +557,17 @@ class App:
                         f"误差控制范围={tolerance*100:.2f}%, 代数={ngen}, "
                         f"下限={', '.join(map(str, lower_bounds))}, 上限={', '.join(map(str, upper_bounds))}, "
                         f"评价指标={selected_metric}, 调整阈值={threshold}\n"
-                        f"调整阈值后的最优解: {', '.join(map(str, adjusted_individual_formatted))}\n"  # 确保转换为字符串
+                        f"调整阈值后的最优解: {', '.join(map(str, adjusted_individual_formatted))}\n"
                         f"调整后的各索力的误差百分比: {', '.join(map(lambda x: f'{x:.2f}%', adjusted_error_percentages))}\n"
+                        f"{solution_status}\n"
                         "--------------------------------------------------")
-
 
             # 记录日志
             logging.info(log_message)
 
         except Exception as e:
             raise e
-            #messagebox.showerror("运算错误", f"遗传算法运行失败：{e}")
+
     
     def trial_run(self):
         try:
