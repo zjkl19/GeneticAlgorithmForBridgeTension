@@ -177,6 +177,14 @@ class App:
         tk.Label(self.root, text="代数(gen):").grid(row=row_index, column=0, sticky="e")
         self.ngen = tk.Entry(self.root)
         self.ngen.grid(row=row_index, column=1)
+        row_index += 1
+
+        # 添加输入框用于指定运行限制时间（分钟）
+        self.time_limit_label = tk.Label(self.root, text="高级搜索运行限制时间（分钟）：")
+        self.time_limit_label.grid(row=row_index, column=0, padx=10, pady=5, sticky='e')
+        self.time_limit = tk.Entry(self.root)
+        self.time_limit.insert(tk.END, "2")  # 默认值2分钟
+        self.time_limit.grid(row=row_index, column=1, padx=10, pady=5, sticky='w')
         row_index += 2  # 添加一个额外的空行作为分隔
 
 
@@ -252,7 +260,11 @@ class App:
 
         # 添加开始计算按钮
         self.start_button = tk.Button(self.root, text="开始计算", command=self.start_calculation)
-        self.start_button.grid(row=row_index+1, column=0, columnspan=3, pady=5)
+        self.start_button.grid(row=row_index+1, column=0)
+
+        # 添加新按钮用于触发高级搜索算法
+        self.advanced_search_button = tk.Button(self.root, text="高级搜索", command=self.run_advanced_search)
+        self.advanced_search_button.grid(row=row_index+1, column=1)
 
         # 调整Notebook的布局以充满整个窗口宽度
         self.root.grid_columnconfigure(1, weight=1)
@@ -568,7 +580,121 @@ class App:
         except Exception as e:
             raise e
 
-    
+    def run_advanced_search(self):
+        try:
+            time_limit = float(self.time_limit.get()) * 60  # 获取运行限制时间，并转换为秒
+        except ValueError:
+            messagebox.showerror("输入错误", "请输入有效的运行限制时间（分钟）")
+            return
+
+        # 获取并验证输入参数
+        selected_metric = self.selected_metric.get()
+        metric_code = "mse" if selected_metric == "均方误差" else "max_error_percent"
+
+        params = self.validate_input()
+        if params is None:
+            return
+
+        population_size, crossover_rate, mutation_rate, min_adjustment, max_adjustment, max_force, tolerance, ngen, lower_bounds, upper_bounds = params
+        threshold = float(self.adjustment_threshold.get())
+
+        try:
+            initial_forces_str = self.initial_forces_text.get("1.0", tk.END).strip()
+            target_forces_str = self.target_forces_text.get("1.0", tk.END).strip()
+            influence_matrix_str = self.influence_matrix_text.get("1.0", tk.END).strip()
+
+            initial_forces = np.fromstring(initial_forces_str, sep='\n')
+            target_forces = np.fromstring(target_forces_str, sep='\n')
+            influence_matrix = np.fromstring(influence_matrix_str, sep=' ').reshape(-1, initial_forces.size)
+
+            assert initial_forces.size == target_forces.size, "初始索力和目标索力的维度不匹配。"
+            assert influence_matrix.shape[0] == influence_matrix.shape[1] == initial_forces.size, "影响矩阵的维度与索力不匹配。"
+
+        except ValueError as e:
+            messagebox.showerror("输入校核错误", str(e))
+            return
+        except Exception as e:
+            messagebox.showerror("未知错误", f"在处理输入数据时发生错误: {e}")
+            return
+
+        try:
+            start_time = time.time()
+            best_solutions = []
+            iteration_count = 0
+
+            while time.time() - start_time < time_limit:
+                best_individual, best_fitness, final_pop, log = run_genetic_algorithm(
+                    initial_forces, target_forces, influence_matrix,
+                    population_size, crossover_rate, mutation_rate,
+                    min_adjustment, max_adjustment, max_force, tolerance, ngen, lower_bounds, upper_bounds, selected_metric=metric_code
+                )
+                
+                # 根据阈值调整索力值
+                adjusted_individual = [value if abs(value) > threshold else 0 for value in best_individual]
+
+                adjusted_forces_after_threshold = initial_forces + np.dot(influence_matrix, adjusted_individual)
+                adjusted_error_percentages = 100 * (adjusted_forces_after_threshold - target_forces) / target_forces
+                max_adjusted_error_percentage = max(abs(e) for e in adjusted_error_percentages)
+
+                best_solutions.append((adjusted_individual, max_adjusted_error_percentage))
+                iteration_count += 1
+
+                # 记录每次运算的日志
+                log_message = (f"第 {iteration_count} 次运算\n"
+                            f"当前最优解: {adjusted_individual}\n"
+                            f"当前最优解的最大误差百分比: {max_adjusted_error_percentage:.2f}%\n")
+                logging.info(log_message)
+
+            best_solutions.sort(key=lambda x: x[1])
+            adjusted_individual, max_adjusted_error_percentage = best_solutions[0]
+            adjusted_individual_formatted = [round(x, 0) for x in adjusted_individual]
+
+            adjusted_forces_after_threshold = initial_forces + np.dot(influence_matrix, adjusted_individual)
+            adjusted_forces_after_threshold_formatted = [round(x, 2) for x in adjusted_forces_after_threshold]
+
+            adjusted_error_percentages = 100 * (adjusted_forces_after_threshold - target_forces) / target_forces
+            adjusted_error_percentages_formatted = [f"{e:.2f}%" for e in adjusted_error_percentages]
+
+            solution_found = all(abs(e) <= tolerance * 100 for e in adjusted_error_percentages)
+            solution_status = f"状态: {'找到解' if solution_found else f'未找到解，当前计算最接近的解调整后的最大误差百分比为: {max_adjusted_error_percentage:.2f}%'}"
+
+            end_time = time.time()
+            run_time = end_time - start_time
+            hours, remainder = divmod(run_time, 3600)
+            minutes, seconds = divmod(remainder, 60)
+
+            self.result_text.delete('1.0', tk.END)
+            self.result_text.insert(tk.END, f"{solution_status}\n")
+            self.result_text.insert(tk.END, f"当前最优解的最大误差百分比: {max_adjusted_error_percentage:.2f}%\n")
+            self.result_text.insert(tk.END, f"调整阈值后的最优解: {adjusted_individual_formatted}\n")
+            self.result_text.insert(tk.END, f"调整阈值后索力: {adjusted_forces_after_threshold_formatted}\n")
+            self.result_text.insert(tk.END, "调整后的误差百分比: \n" + ", ".join(adjusted_error_percentages_formatted) + "\n")
+            self.result_text.insert(tk.END, f"运行时间: {int(hours)}时{int(minutes)}分{int(seconds)}秒\n")
+
+            time_str = f"{int(hours)}小时{int(minutes)}分{int(seconds)}秒"
+
+            filename = generate_excel_with_timestamp(
+                initial_forces.tolist(),
+                target_forces.tolist(),
+                influence_matrix,
+                adjusted_individual_formatted,
+                adjusted_individual_formatted
+            )
+
+            log_message = (f"计算时间: {time_str}\n"
+                        f"当前最优解的最大误差百分比: {max_adjusted_error_percentage:.2f}%\n"
+                        f"调整阈值后的最优解: {', '.join(map(str, adjusted_individual_formatted))}\n"
+                        f"调整后的各索力的误差百分比: {', '.join(map(lambda x: f'{x:.2f}%', adjusted_error_percentages))}\n"
+                        f"{solution_status}\n"
+                        "--------------------------------------------------")
+
+            logging.info(log_message)
+
+        except KeyboardInterrupt:
+            messagebox.showinfo("中断", "操作已被用户中断")
+        except Exception as e:
+            raise e
+
     def trial_run(self):
         try:
             # 从 GUI 获取固定参数
