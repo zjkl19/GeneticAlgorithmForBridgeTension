@@ -19,28 +19,41 @@ if not hasattr(creator, "Individual"):
     creator.create("Individual", list, fitness=creator.FitnessMin)
 
 # 评估个体适应度的函数
-def evalAdjustment(individual, initial_forces, target_forces, influence_matrix, max_force, min_adjustment, max_adjustment, tolerance,lower_bounds, upper_bounds, selected_metric='max_error_percent'):
+def evalAdjustment(individual, initial_forces, target_forces, influence_matrix, max_force, min_adjustment, max_adjustment, tolerance, lower_bounds, upper_bounds, selected_metric='max_error_percent', threshold=40):
     PENALTY = 1e3
+    
     # 根据影响矩阵和个体基因计算调整后的索力
     adjusted_forces = initial_forces + np.dot(influence_matrix, individual)
+    
     penalties = 0  # 初始化罚分
+    
     # 如果调整后的索力超出最大值或小于0，则增加罚分
     if any(adjusted_forces > max_force) or any(adjusted_forces < 0):
         penalties += PENALTY
+    
     # 检查个体的每个基因是否在下限和上限之间
     for gene, lb, ub in zip(individual, lower_bounds, upper_bounds):
         if gene < lb or gene > ub:
             penalties += PENALTY  # 对于超出范围的基因施加罚分
-    # 计算索力调整的误差
-    error = np.abs((adjusted_forces - target_forces) / target_forces)
+    
     # 如果个体基因值超出调整范围，则增加罚分
     if any(x < min_adjustment or x > max_adjustment for x in individual):
         penalties += PENALTY
+    
+    # 应用阈值调整（将绝对值小于阈值的基因置为0）
+    adjusted_individual = [value if abs(value) > threshold else 0 for value in individual]
+    
+    # 根据阈值调整后的个体基因计算最终的调整索力
+    adjusted_forces_after_threshold = initial_forces + np.dot(influence_matrix, adjusted_individual)
+    
+    # 计算索力调整的误差
+    error = np.abs((adjusted_forces_after_threshold - target_forces) / target_forces)
+    
     # 如果误差超出容忍范围，则增加罚分
     if any(error > tolerance):
         penalties += PENALTY
 
-    error_percent = (adjusted_forces - target_forces) / target_forces  # 计算误差
+    error_percent = (adjusted_forces_after_threshold - target_forces) / target_forces  # 计算误差
     
     # 计算最大误差百分比，同时考虑正误差和负误差
     max_positive_error_percent = np.max(error_percent)
@@ -55,6 +68,7 @@ def evalAdjustment(individual, initial_forces, target_forces, influence_matrix, 
         return (mse + penalties,)
     elif selected_metric == 'max_error_percent':
         return (max_abs_error_percent + penalties,)
+
 
 # 运行遗传算法的主函数
 def run_genetic_algorithm(initial_forces, target_forces, influence_matrix, population_size, crossover_rate, mutation_rate, min_adjustment, max_adjustment, max_force, tolerance, ngen,lower_bounds, upper_bounds,selected_metric):
@@ -73,7 +87,7 @@ def run_genetic_algorithm(initial_forces, target_forces, influence_matrix, popul
 
     # 注册交叉、变异和选择算子
     toolbox.register("mate", tools.cxTwoPoint)
-    toolbox.register("mutate", tools.mutGaussian, mu=0, sigma=50, indpb=0.1)
+    toolbox.register("mutate", tools.mutUniformInt, low=-500, up=500, indpb=0.4)
     toolbox.register("select", tools.selTournament, tournsize=3)
 
     # 生成初始种群

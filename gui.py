@@ -1,5 +1,8 @@
 import tkinter as tk
+from tkinter import ttk
+from tkinter import scrolledtext
 from tkinter import messagebox
+from tkinter import filedialog
 from genetic_algorithm import run_genetic_algorithm
 import numpy as np
 import json
@@ -96,178 +99,181 @@ class App:
         self.root = root
         self.root.title("索力调整遗传算法")
         self.selected_metric = tk.StringVar(value="最大误差比例")  # 默认为最大误差比例
+
+        # 创建一个外框架
+        outer_frame = ttk.Frame(self.root)
+        outer_frame.pack(fill="both", expand=True)
+
+        # 创建Canvas和滚动条
+        self.canvas = tk.Canvas(outer_frame)
+        self.scrollbar = ttk.Scrollbar(outer_frame, orient="vertical", command=self.canvas.yview)
+        self.scrollable_frame = ttk.Frame(self.canvas)
+
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(
+                scrollregion=self.canvas.bbox("all")
+            )
+        )
+
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+        # 在滚动框架内创建所有控件
         self.create_widgets()
 
-    def open_latest_excel(self):
-        # 查找当前目录下所有匹配的Excel文件
-        files = glob.glob("计算结果_*.xlsx")
-        # 按文件修改时间排序，获取最新的文件
-        if files:
-            latest_file = max(files, key=os.path.getmtime)
-            try:
-                os.startfile(latest_file)  # 尝试使用系统默认方式打开文件
-            except Exception as e:
-                messagebox.showerror("错误", f"无法打开文件{latest_file}。\n错误信息: {str(e)}")
-        else:
-            messagebox.showinfo("提示", "当前目录下没有找到Excel文件，请先生成。")
-
     def create_widgets(self):
-        # 输入参数区域
         row_index = 0  # 控制布局的行号
-        tk.Label(self.root, text="种群大小:").grid(row=row_index, column=0, sticky="e")
-        self.population_size = tk.Entry(self.root)
-        self.population_size.grid(row=row_index, column=1)
+        tk.Label(self.scrollable_frame, text="种群大小:").pack()
+        self.population_size = tk.Entry(self.scrollable_frame)
+        self.population_size.pack()
         row_index += 1
 
-    
-        tk.Label(self.root, text="交叉率:").grid(row=row_index, column=0, sticky="e")
-        self.crossover_rate = tk.Entry(self.root)
-        self.crossover_rate.grid(row=row_index, column=1)
+        tk.Label(self.scrollable_frame, text="交叉率:").pack()
+        self.crossover_rate = tk.Entry(self.scrollable_frame)
+        self.crossover_rate.pack()
         row_index += 1
 
-        tk.Label(self.root, text="变异率:").grid(row=row_index, column=0, sticky="e")
-        self.mutation_rate = tk.Entry(self.root)
-        self.mutation_rate.grid(row=row_index, column=1)
+        tk.Label(self.scrollable_frame, text="变异率:").pack()
+        self.mutation_rate = tk.Entry(self.scrollable_frame)
+        self.mutation_rate.pack()
         row_index += 1
 
-        tk.Label(self.root, text="最小调整力(例：-300):").grid(row=row_index, column=0, sticky="e")
-        self.min_adjustment = tk.Entry(self.root)
-        self.min_adjustment.grid(row=row_index, column=1)
+        tk.Label(self.scrollable_frame, text="最小调整力(例：-300):").pack()
+        self.min_adjustment = tk.Entry(self.scrollable_frame)
+        self.min_adjustment.pack()
         row_index += 1
 
-        tk.Label(self.root, text="最大调整力(例：300):").grid(row=row_index, column=0, sticky="e")
-        self.max_adjustment = tk.Entry(self.root)
-        self.max_adjustment.grid(row=row_index, column=1)
+        tk.Label(self.scrollable_frame, text="最大调整力(例：300):").pack()
+        self.max_adjustment = tk.Entry(self.scrollable_frame)
+        self.max_adjustment.pack()
         row_index += 1
 
-        tk.Label(self.root, text="索力最大值限制:").grid(row=row_index, column=0, sticky="e")
-        self.max_force = tk.Entry(self.root)
-        self.max_force.grid(row=row_index, column=1)
+        tk.Label(self.scrollable_frame, text="索力最大值限制:").pack()
+        self.max_force = tk.Entry(self.scrollable_frame)
+        self.max_force.pack()
         row_index += 1
 
-        tk.Label(self.root, text="误差控制范围(%):").grid(row=row_index, column=0, sticky="e")
-        self.tolerance = tk.Entry(self.root)
-        self.tolerance.grid(row=row_index, column=1)
+        tk.Label(self.scrollable_frame, text="误差控制范围(%):").pack()
+        self.tolerance = tk.Entry(self.scrollable_frame)
+        self.tolerance.pack()
         row_index += 1
 
-
-        tk.Label(self.root, text="索下限(可用Tab/逗号/空格分隔):").grid(row=row_index, column=0, sticky="e")
-        self.lower_bounds_text = tk.Text(self.root, height=2)
-        self.lower_bounds_text.grid(row=row_index, column=1)
+        tk.Label(self.scrollable_frame, text="索下限(可用Tab/逗号/空格分隔):").pack()
+        self.lower_bounds_text = tk.Text(self.scrollable_frame, height=2)
+        self.lower_bounds_text.pack()
         row_index += 1
 
-        tk.Label(self.root, text="索上限(可用Tab/逗号/空格分隔):").grid(row=row_index, column=0, sticky="e")
-        self.upper_bounds_text = tk.Text(self.root, height=2)
-        self.upper_bounds_text.grid(row=row_index, column=1)
+        tk.Label(self.scrollable_frame, text="索上限(可用Tab/逗号/空格分隔):").pack()
+        self.upper_bounds_text = tk.Text(self.scrollable_frame, height=2)
+        self.upper_bounds_text.pack()
         row_index += 1
 
         # 添加评价指标选择的下拉菜单
         metrics_options = ["最大误差比例", "均方误差"]
-        tk.Label(self.root, text="选择评价指标:").grid(row=row_index, column=0, sticky="e")
-        self.metric_dropdown = ttk.Combobox(self.root, textvariable=self.selected_metric, values=metrics_options, state='readonly')
-        self.metric_dropdown.grid(row=row_index, column=1, sticky="ew")
+        tk.Label(self.scrollable_frame, text="选择评价指标:").pack()
+        self.metric_dropdown = ttk.Combobox(self.scrollable_frame, textvariable=self.selected_metric, values=metrics_options, state='readonly')
+        self.metric_dropdown.pack()
         row_index += 1
 
-        tk.Label(self.root, text="调整阈值:").grid(row=row_index, column=0, sticky="e")
-        self.adjustment_threshold = tk.Entry(self.root)
-        self.adjustment_threshold.grid(row=row_index, column=1)
+        tk.Label(self.scrollable_frame, text="调整阈值:").pack()
+        self.adjustment_threshold = tk.Entry(self.scrollable_frame)
+        self.adjustment_threshold.pack()
         self.adjustment_threshold.insert(0, '0')  # 可以设置一个默认阈值，例如0
         row_index += 1
 
-        tk.Label(self.root, text="代数(gen):").grid(row=row_index, column=0, sticky="e")
-        self.ngen = tk.Entry(self.root)
-        self.ngen.grid(row=row_index, column=1)
+        tk.Label(self.scrollable_frame, text="代数(gen):").pack()
+        self.ngen = tk.Entry(self.scrollable_frame)
+        self.ngen.pack()
         row_index += 1
 
         # 添加输入框用于指定运行限制时间（分钟）
-        self.time_limit_label = tk.Label(self.root, text="高级搜索运行限制时间（分钟）：")
-        self.time_limit_label.grid(row=row_index, column=0, padx=10, pady=5, sticky='e')
-        self.time_limit = tk.Entry(self.root)
+        self.time_limit_label = tk.Label(self.scrollable_frame, text="高级搜索运行限制时间（分钟）：")
+        self.time_limit_label.pack()
+        self.time_limit = tk.Entry(self.scrollable_frame)
         self.time_limit.insert(tk.END, "2")  # 默认值2分钟
-        self.time_limit.grid(row=row_index, column=1, padx=10, pady=5, sticky='w')
+        self.time_limit.pack()
         row_index += 2  # 添加一个额外的空行作为分隔
 
-
         # initial_forces 输入
-        tk.Label(self.root, text="初始索力:").grid(row=row_index, column=0, sticky="e")
-        self.initial_forces_text = tk.Text(self.root, height=5)
-        self.initial_forces_text.grid(row=row_index, column=1, columnspan=2, pady=5)
+        tk.Label(self.scrollable_frame, text="初始索力:").pack()
+        self.initial_forces_text = tk.Text(self.scrollable_frame, height=5)
+        self.initial_forces_text.pack()
         row_index += 1
 
         # target_forces 输入
-        tk.Label(self.root, text="目标索力:").grid(row=row_index, column=0, sticky="e")
-        self.target_forces_text = tk.Text(self.root, height=5)
-        self.target_forces_text.grid(row=row_index, column=1, columnspan=2, pady=5)
+        tk.Label(self.scrollable_frame, text="目标索力:").pack()
+        self.target_forces_text = tk.Text(self.scrollable_frame, height=5)
+        self.target_forces_text.pack()
         row_index += 1
 
         # influence_matrix 输入
-        tk.Label(self.root, text="影响矩阵:").grid(row=row_index, column=0, sticky="e")
-        self.influence_matrix_text = tk.Text(self.root, height=5)
-        self.influence_matrix_text.grid(row=row_index, column=1, columnspan=2, pady=5)
+        tk.Label(self.scrollable_frame, text="影响矩阵:").pack()
+        self.influence_matrix_text = tk.Text(self.scrollable_frame, height=5)
+        self.influence_matrix_text.pack()
         row_index += 1
 
         # 添加查看日志按钮
-        self.view_log_button = tk.Button(self.root, text="查看日志", command=self.view_log)
-        self.view_log_button.grid(row=row_index, column=0, columnspan=3, pady=5)
+        self.view_log_button = tk.Button(self.scrollable_frame, text="查看日志", command=self.view_log)
+        self.view_log_button.pack()
         row_index += 1
 
         # 创建“打开最新验算Excel”按钮
-        self.open_excel_button = tk.Button(self.root, text="打开最新验算Excel", command=self.open_latest_excel)
-        self.open_excel_button.grid(row=row_index, column=0, columnspan=3, pady=5)
+        self.open_excel_button = tk.Button(self.scrollable_frame, text="打开最新验算Excel", command=self.open_latest_excel)
+        self.open_excel_button.pack()
         row_index += 1
 
         # 添加标签页控件
-        self.notebook = ttk.Notebook(self.root)
+        self.notebook = ttk.Notebook(self.scrollable_frame)
         self.config_tab = ttk.Frame(self.notebook)  # 配置标签页
         self.notebook.add(self.config_tab, text='试算配置')
-        self.notebook.grid(row=row_index, column=0, columnspan=3, pady=10, sticky="ew")
+        self.notebook.pack(pady=10, fill="x")
         row_index += 1
 
         # 在试算配置标签页中添加控件
         trial_row_index = 0  # 控制试算配置内的布局行号
-        tk.Label(self.config_tab, text="交叉率范围:").grid(row=trial_row_index, column=0, sticky="e")
+        tk.Label(self.config_tab, text="交叉率范围:").pack()
         self.crossover_rate_min = tk.Entry(self.config_tab)
-        self.crossover_rate_min.grid(row=trial_row_index, column=1)
+        self.crossover_rate_min.pack(side="left")
         self.crossover_rate_max = tk.Entry(self.config_tab)
-        self.crossover_rate_max.grid(row=trial_row_index, column=2)
+        self.crossover_rate_max.pack(side="left")
         trial_row_index += 1
 
-        tk.Label(self.config_tab, text="变异率范围:").grid(row=trial_row_index, column=0, sticky="e")
+        tk.Label(self.config_tab, text="变异率范围:").pack()
         self.mutation_rate_min = tk.Entry(self.config_tab)
-        self.mutation_rate_min.grid(row=trial_row_index, column=1)
+        self.mutation_rate_min.pack(side="left")
         self.mutation_rate_max = tk.Entry(self.config_tab)
-        self.mutation_rate_max.grid(row=trial_row_index, column=2)
+        self.mutation_rate_max.pack(side="left")
         trial_row_index += 1
 
         # 试算按钮
         self.trial_run_button = tk.Button(self.config_tab, text="试算", command=self.trial_run)
-        self.trial_run_button.grid(row=trial_row_index, column=0, columnspan=3)
+        self.trial_run_button.pack()
 
         # 配置操作按钮
-        self.save_config_button = tk.Button(self.root, text="保存配置", command=self.save_config)
-        self.save_config_button.grid(row=row_index, column=0)
-        
-        self.load_config_button = tk.Button(self.root, text="加载配置", command=self.load_config)
-        self.load_config_button.grid(row=row_index, column=1)
-        
-        self.backup_config_button = tk.Button(self.root, text="备份配置", command=self.backup_config)
-        self.backup_config_button.grid(row=row_index, column=2)
+        self.save_config_button = tk.Button(self.scrollable_frame, text="保存配置", command=self.save_config)
+        self.save_config_button.pack(side="left")
+
+        self.load_config_button = tk.Button(self.scrollable_frame, text="加载配置", command=self.load_config)
+        self.load_config_button.pack(side="left")
+
+        self.backup_config_button = tk.Button(self.scrollable_frame, text="备份配置", command=self.backup_config)
+        self.backup_config_button.pack(side="left")
         row_index += 2  # 添加一个额外的空行作为分隔
 
         # 结果显示区域，位于所有控件的最下方
-        self.result_text = tk.Text(self.root, height=10, width=50)
-        self.result_text.grid(row=row_index, column=0, columnspan=3, pady=5)
+        self.result_text = tk.Text(self.scrollable_frame, height=10, width=50)
+        self.result_text.pack(pady=5)
 
         # 添加开始计算按钮
-        self.start_button = tk.Button(self.root, text="开始计算", command=self.start_calculation)
-        self.start_button.grid(row=row_index+1, column=0)
+        self.start_button = tk.Button(self.scrollable_frame, text="开始计算", command=self.start_calculation)
+        self.start_button.pack(side="left")
 
         # 添加新按钮用于触发高级搜索算法
-        self.advanced_search_button = tk.Button(self.root, text="高级搜索", command=self.run_advanced_search)
-        self.advanced_search_button.grid(row=row_index+1, column=1)
-
-        # 调整Notebook的布局以充满整个窗口宽度
-        self.root.grid_columnconfigure(1, weight=1)
+        self.advanced_search_button = tk.Button(self.scrollable_frame, text="高级搜索", command=self.run_advanced_search)
+        self.advanced_search_button.pack(side="left")
 
         # 设置默认值
         self.population_size.insert(0, '1000')  # 种群大小默认值1000
@@ -283,7 +289,18 @@ class App:
         self.mutation_rate_min.insert(0, '0.01')
         self.mutation_rate_max.insert(0, '0.1')
         self.adjustment_threshold.insert(0, '40')
-
+    def open_latest_excel(self):
+            # 查找当前目录下所有匹配的Excel文件
+            files = glob.glob("计算结果_*.xlsx")
+            # 按文件修改时间排序，获取最新的文件
+            if files:
+                latest_file = max(files, key=os.path.getmtime)
+                try:
+                    os.startfile(latest_file)  # 尝试使用系统默认方式打开文件
+                except Exception as e:
+                    messagebox.showerror("错误", f"无法打开文件{latest_file}。\n错误信息: {str(e)}")
+            else:
+                messagebox.showinfo("提示", "当前目录下没有找到Excel文件，请先生成。")
 
     def view_log(self):
         import os
